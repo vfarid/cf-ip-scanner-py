@@ -127,3 +127,6 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+cf-ipv6.txt
+config.ini
+selected-ips.csv
