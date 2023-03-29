@@ -6,6 +6,16 @@ import ipaddress
 import re
 import random
 import time
+import tabulate
+
+def print_result_table(headers:list, data:list, fmt="heavy_grid"):
+    """
+        this function take header and data and table format 
+        and print data table with format
+    """
+    print(tabulate.tabulate(headers=headers ,tabular_data=data, tablefmt=fmt))
+
+
 
 def countCIDR(cidr):
     mask = int(cidr.split('/')[1])
@@ -121,6 +131,7 @@ default_subdomain = config.get('DEFAULT', 'subdomain', fallback='')
 cidr_list = []
 ip_list = []
 selectd_ip_list = []
+ip_selected_table_data = []
 include_regex = ''
 exclude_regex = ''
 
@@ -224,24 +235,23 @@ for ip in ip_list:
         if download_speed < min_download_speed or upload_speed < min_upload_speed:
             continue
 
-        if successful_no == 1:
-            print("\r", end='')
-            print("|-----|------------------|----------------|----------------|")
-            print("|  #  |                  | Downlaod(Mbps) |  Upload(Mbps)  |")
-            print("|-----|------------------|----------------|----------------|")
-
-        print(f"\r| {successful_no:3d} | {ip:16s} |     {download_speed:10.2f} |     {upload_speed:10.2f} |")
+        # print(f"\r| {successful_no:3d} | {ip:16s} |     {download_speed:10.2f} |     {upload_speed:10.2f} |")
         selectd_ip_list.append(ip)
+        # ip_selected_table_data.append({"ip":ip, "download_speed":download_speed, "upload_speed":upload_speed})
+        ip_selected_table_data.append([ip, download_speed, upload_speed])
     except KeyboardInterrupt:
         print("\n\nRequest cancelled by user!")
         sys.exit(0)
     except requests.exceptions.RequestException as e:
         print("\r", end='') # Nothing to do
 
+
     if len(selectd_ip_list) >= max_ip:
         break
 
-print("|-----|------------------|----------------|----------------|")
+# Print result in a nice table format
+print("\n")
+print_result_table(data=ip_selected_table_data, fmt="grid", headers=["ip", "download_speed", "upload_speed"])
 
 if replace_cf.lower() in ["y", "yes"]:
     existing_records = getExistingRecords(email, api_key, zone_id, subdomain)
