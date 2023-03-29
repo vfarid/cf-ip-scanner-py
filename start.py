@@ -141,18 +141,22 @@ try:
         ip_exclude = ''
 
     # Convert the input to the appropriate types
-    max_ip = int(max_ip)
-    max_latency = int(max_latency)
-    test_size = int(test_size)
-    min_download_speed = float(min_download_speed)
-    min_upload_speed = float(min_upload_speed)
+    try:
+        max_ip = int(max_ip)
+        max_latency = int(max_latency)
+        test_size = int(test_size)
+        min_download_speed = float(min_download_speed)
+        min_upload_speed = float(min_upload_speed)
+    except ValueError:
+        sys.exit("Invalid Input :(")
+
     email = default_email
     zone_id = default_zone_id
     api_key = default_api_key
     subdomain = default_subdomain
 
     replace_cf = input("Do you want to upload the result to your Cloudflare subdomain [y/N]? ")
-    if replace_cf.lower() == "y" or replace_cf.lower() == "yes":
+    if replace_cf.lower() in ["y", "yes"]:
         # Prompt user for Cloudflare credentials
         email = input(f"Cloudflare email [{default_email}]: ") or default_email
         zone_id = input(f"Cloudflare zone ID [{default_zone_id}]: ") or default_zone_id
@@ -218,7 +222,7 @@ for ip in ip_list:
         upload_speed = getUploadSpeed(ip, test_size)
 
         if download_speed < min_download_speed or upload_speed < min_upload_speed:
-            continue;
+            continue
 
         if successful_no == 1:
             print("\r", end='')
@@ -239,7 +243,7 @@ for ip in ip_list:
 
 print("|-----|------------------|----------------|----------------|")
 
-if replace_cf.lower() == "y" or replace_cf.lower() == "yes":
+if replace_cf.lower() in ["y", "yes"]:
     existing_records = getExistingRecords(email, api_key, zone_id, subdomain)
     print("\nDeleting existing records...", end='')
     for record in existing_records:
