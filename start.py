@@ -313,6 +313,7 @@ default_api_key = config.get('DEFAULT', 'api_key', fallback='')
 default_subdomain = config.get('DEFAULT', 'subdomain', fallback='')
 
 # Initialise the required variables
+delete_existing = 'yes'
 cidr_list = []
 ip_list = []
 selectd_ip_list = []
