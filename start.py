@@ -468,13 +468,32 @@ if __name__ == "__main__":
 
         print("")
         # Read IPv4 CIDR blocks of Cloudflare Network from related file
-        with open('cf-ipv4.txt', 'r') as f:
-            lines = f.readlines()
-            with Pool(5) as p:
-                result = p.map(
-                    partial(processRegex, include_reg=include_regex, exclude_reg=exclude_regex), lines)
+        try:
+            with open('cf-ipv4.txt', 'r') as f:
+                lines = f.readlines()
+                with Pool(5) as p:
+                    result = p.map(
+                        partial(processRegex, include_reg=include_regex, exclude_reg=exclude_regex), lines)
 
-        ip_list = list(itertools.chain(*result))
+            ip_list = list(itertools.chain(*result))
+        except:
+            with open('cf-ipv4.txt', 'r') as f:
+                for line in f:
+                    cidr = line.strip()
+                    if cidr:
+                        print(f"Processing {cidr}...      \r", end='')
+
+                        # Ignore CIDR block if not matches with include regex
+                        if include_regex and not include_regex.match(cidr):
+                            continue
+
+                        # Ignore CIDR block if matches with exclude regex
+                        if exclude_regex and exclude_regex.match(cidr):
+                            continue
+
+                        # Convert CIDR block to IP addresses and add them to IP List
+                        ip_list = ip_list + processCIDR(cidr)
+
 
         # Shuffling the IP list in order to test different ip in different ranges by random
         print(f"\n{len(ip_list)} IPs found. Shuffling the IPs...", end='')
