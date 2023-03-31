@@ -8,7 +8,10 @@ import random
 import time
 import configparser
 import ping3
-
+from functools import partial
+from multiprocessing import Pool
+import itertools
+from typing import Pattern, AnyStr, List
 # Function to get a list of IP addresses in a CIDR block
 def processCIDR(cidr):
     """
@@ -281,255 +284,267 @@ def addNewCloudflareRecord(email: str, api_key: str, zone_id: str, subdomain: st
     response.raise_for_status()
 
 
-# Set default values for configuration variables
-DEFAULT_MAX_IP = 50
-DEFAULT_MAX_PING = 500
-DEFAULT_MAX_LATENCY = 500
-DEFAULT_IP_REGEX = ""
-DEFAULT_IP_INCLUDE = ""
-DEFAULT_IP_EXCLUDE = ""
-DEFAULT_DOWNLOAD_SIZE_KB = 1024
-DEFAULT_MIN_DOWNLOAD_SPEED = 3
-DEFAULT_MIN_UPLOAD_SPEED = 0.3
+def processRegex(cidr: str, include_reg: Pattern[AnyStr], exclude_reg: Pattern[AnyStr]) -> List[AnyStr]:
+    """
+    Args:
+        cidr (str): A CIDR block of Cloudflare Network to be converted to IP addresses.
+        include_reg (Pattern[AnyStr]): A Regex Pattern to include IPs
+        exclude_reg (Pattern[AnyStr]): A Regex Pattern to exclude IPs
 
-# Create a new configparser instance and load the configuration file
-config = configparser.ConfigParser()
-config.read('config.ini')
-
-# Get the values of the configuration variables, using default values if not available
-max_ip = int(config.get('DEFAULT', 'max_ip', fallback=DEFAULT_MAX_IP))
-max_ping = int(config.get('DEFAULT', 'max_ping', fallback=DEFAULT_MAX_PING))
-max_latency = int(config.get('DEFAULT', 'max_latency', fallback=DEFAULT_MAX_LATENCY))
-ip_include = config.get('DEFAULT', 'ip_include', fallback=DEFAULT_IP_INCLUDE)
-ip_exclude = config.get('DEFAULT', 'ip_exclude', fallback=DEFAULT_IP_EXCLUDE)
-test_size = config.get('DEFAULT', 'test_size', fallback=DEFAULT_DOWNLOAD_SIZE_KB)
-min_download_speed = config.get('DEFAULT', 'min_download_speed', fallback=DEFAULT_MIN_DOWNLOAD_SPEED)
-min_upload_speed = config.get('DEFAULT', 'min_upload_speed', fallback=DEFAULT_MIN_UPLOAD_SPEED)
-default_upload_results = config.get('DEFAULT', 'upload_results', fallback='no')
-default_delete_existing = config.get('DEFAULT', 'delete_existing', fallback='yes')
-default_email = config.get('DEFAULT', 'email', fallback='')
-default_zone_id = config.get('DEFAULT', 'zone_id', fallback='')
-default_api_key = config.get('DEFAULT', 'api_key', fallback='')
-default_subdomain = config.get('DEFAULT', 'subdomain', fallback='')
-
-# Initialise the required variables
-delete_existing = 'yes'
-cidr_list = []
-ip_list = []
-selectd_ip_list = []
-include_regex = ''
-exclude_regex = ''
-
-print("Press CTRL+C to exit...\n")
-
-try:
-    # Prompt user for input with default values from configuration file
-    max_ip = input(f"Enter max IP [{max_ip}]: ") or max_ip
-    max_ping = input(f"Enter max ping [{max_ping}]: ") or max_ping
-    max_latency = input(f"Enter max latency [{max_latency}]: ") or max_latency
-    ip_include = input(f"Enter IPs to include (comma seperated, '-' to ignore) [{ip_include}]: ") or ip_include
-    ip_exclude = input(f"Enter IPs to exclude (comma seperated, '-' to ignore) [{ip_exclude}]: ") or ip_exclude
-    test_size = input(f"Enter test data size in KB [{test_size}]: ") or test_size
-    min_download_speed = input(f"Enter minimum download speed (Mbps) [{min_download_speed}]: ") or min_download_speed
-    min_upload_speed = input(f"Enter minimum upload speed (Mbps) [{min_upload_speed}]: ") or min_upload_speed
-
-    # Clear the include regex in case "-" provided by the user
-    if ip_include == '-':
-        ip_include = ''
-
-    # Clear the exclude regex in case "-" provided by the user
-    if ip_exclude == '-':
-        ip_exclude = ''
-
-    # Convert the inputs to the appropriate types in related variables
-    max_ip = int(max_ip)
-    max_ping = int(max_ping)
-    max_latency = int(max_latency)
-    test_size = int(test_size)
-    min_download_speed = float(min_download_speed)
-    min_upload_speed = float(min_upload_speed)
-    email = default_email
-    zone_id = default_zone_id
-    api_key = default_api_key
-    subdomain = default_subdomain
+    Returns:
+        List[AnyStr]: A list of IPs converted from cidr
+    """
+    cidr = cidr.strip()
+    if cidr:
+        print(f"Processing {cidr}...      \r", end='')
+        if include_reg and not include_reg.match(cidr):
+            return []
+        if exclude_reg and exclude_reg.match(cidr):
+            return []
+        return processCIDR(cidr)
 
 
-    # Prompt the user for whether they want to upload the result to their Cloudflare subdomain
-    upload_results = input(f"Do you want to upload the result to your Cloudflare subdomain (yes/no) [{default_upload_results}]? ") or default_upload_results
+if __name__ == "__main__":
+    # Set default values for configuration variables
+    DEFAULT_MAX_IP = 50
+    DEFAULT_MAX_PING = 500
+    DEFAULT_MAX_LATENCY = 500
+    DEFAULT_IP_REGEX = ""
+    DEFAULT_IP_INCLUDE = ""
+    DEFAULT_IP_EXCLUDE = ""
+    DEFAULT_DOWNLOAD_SIZE_KB = 1024
+    DEFAULT_MIN_DOWNLOAD_SPEED = 3
+    DEFAULT_MIN_UPLOAD_SPEED = 0.3
 
-    # Code block to execute if upload_results is 'y' or 'yes'
-    if upload_results.lower() in ["y", "yes"]:
-        delete_existing = input(f"Do you want to delete extisting records of given subdomain before uploading the result to your Cloudflare (yes/no) [{default_delete_existing}]? ") or default_delete_existing
-        email = input(f"Cloudflare email [{default_email}]: ") or default_email
-        zone_id = input(f"Cloudflare zone ID [{default_zone_id}]: ") or default_zone_id
-        api_key = input(f"Cloudflare API key [{default_api_key}]: ") or default_api_key
+    # Create a new configparser instance and load the configuration file
+    config = configparser.ConfigParser()
+    config.read('config.ini')
 
-        # Check if provided credentials are correct and retry if they are not
-        while not validateCloudflareCredentials(email, api_key, zone_id):
-            print("Invalid cloudflare credentials, please try again.")
+    # Get the values of the configuration variables, using default values if not available
+    max_ip = int(config.get('DEFAULT', 'max_ip', fallback=DEFAULT_MAX_IP))
+    max_ping = int(config.get('DEFAULT', 'max_ping', fallback=DEFAULT_MAX_PING))
+    max_latency = int(config.get('DEFAULT', 'max_latency', fallback=DEFAULT_MAX_LATENCY))
+    ip_include = config.get('DEFAULT', 'ip_include', fallback=DEFAULT_IP_INCLUDE)
+    ip_exclude = config.get('DEFAULT', 'ip_exclude', fallback=DEFAULT_IP_EXCLUDE)
+    test_size = config.get('DEFAULT', 'test_size', fallback=DEFAULT_DOWNLOAD_SIZE_KB)
+    min_download_speed = config.get('DEFAULT', 'min_download_speed', fallback=DEFAULT_MIN_DOWNLOAD_SPEED)
+    min_upload_speed = config.get('DEFAULT', 'min_upload_speed', fallback=DEFAULT_MIN_UPLOAD_SPEED)
+    default_upload_results = config.get('DEFAULT', 'upload_results', fallback='no')
+    default_delete_existing = config.get('DEFAULT', 'delete_existing', fallback='yes')
+    default_email = config.get('DEFAULT', 'email', fallback='')
+    default_zone_id = config.get('DEFAULT', 'zone_id', fallback='')
+    default_api_key = config.get('DEFAULT', 'api_key', fallback='')
+    default_subdomain = config.get('DEFAULT', 'subdomain', fallback='')
+
+    # Initialise the required variables
+    delete_existing = 'yes'
+    cidr_list = []
+    ip_list = []
+    selectd_ip_list = []
+    include_regex = ''
+    exclude_regex = ''
+
+    print("Press CTRL+C to exit...\n")
+
+    try:
+        # Prompt user for input with default values from configuration file
+        max_ip = input(f"Enter max IP [{max_ip}]: ") or max_ip
+        max_ping = input(f"Enter max ping [{max_ping}]: ") or max_ping
+        max_latency = input(f"Enter max latency [{max_latency}]: ") or max_latency
+        ip_include = input(f"Enter IPs to include (comma seperated, '-' to ignore) [{ip_include}]: ") or ip_include
+        ip_exclude = input(f"Enter IPs to exclude (comma seperated, '-' to ignore) [{ip_exclude}]: ") or ip_exclude
+        test_size = input(f"Enter test data size in KB [{test_size}]: ") or test_size
+        min_download_speed = input(f"Enter minimum download speed (Mbps) [{min_download_speed}]: ") or min_download_speed
+        min_upload_speed = input(f"Enter minimum upload speed (Mbps) [{min_upload_speed}]: ") or min_upload_speed
+
+        # Clear the include regex in case "-" provided by the user
+        if ip_include == '-':
+            ip_include = ''
+
+        # Clear the exclude regex in case "-" provided by the user
+        if ip_exclude == '-':
+            ip_exclude = ''
+
+        # Convert the inputs to the appropriate types in related variables
+        max_ip = int(max_ip)
+        max_ping = int(max_ping)
+        max_latency = int(max_latency)
+        test_size = int(test_size)
+        min_download_speed = float(min_download_speed)
+        min_upload_speed = float(min_upload_speed)
+        email = default_email
+        zone_id = default_zone_id
+        api_key = default_api_key
+        subdomain = default_subdomain
+
+
+        # Prompt the user for whether they want to upload the result to their Cloudflare subdomain
+        upload_results = input(f"Do you want to upload the result to your Cloudflare subdomain (yes/no) [{default_upload_results}]? ") or default_upload_results
+
+        # Code block to execute if upload_results is 'y' or 'yes'
+        if upload_results.lower() in ["y", "yes"]:
+            delete_existing = input(f"Do you want to delete extisting records of given subdomain before uploading the result to your Cloudflare (yes/no) [{default_delete_existing}]? ") or default_delete_existing
             email = input(f"Cloudflare email [{default_email}]: ") or default_email
             zone_id = input(f"Cloudflare zone ID [{default_zone_id}]: ") or default_zone_id
             api_key = input(f"Cloudflare API key [{default_api_key}]: ") or default_api_key
 
-        # Prompt user to enter subdomain to modify
-        subdomain = input(f"Subdomain to modify (i.e ip.my-domain.com) [{default_subdomain}]: ") or default_subdomain
+            # Check if provided credentials are correct and retry if they are not
+            while not validateCloudflareCredentials(email, api_key, zone_id):
+                print("Invalid cloudflare credentials, please try again.")
+                email = input(f"Cloudflare email [{default_email}]: ") or default_email
+                zone_id = input(f"Cloudflare zone ID [{default_zone_id}]: ") or default_zone_id
+                api_key = input(f"Cloudflare API key [{default_api_key}]: ") or default_api_key
 
-        # Use regular expression to validate subdomain format
-        while not re.match(r"^[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,}$", subdomain):
-            # If subdomain is invalid, prompt user to try again
-            print("Invalid subdomain, please try again.")
+            # Prompt user to enter subdomain to modify
             subdomain = input(f"Subdomain to modify (i.e ip.my-domain.com) [{default_subdomain}]: ") or default_subdomain
 
-    # Update config variable with given data from user
-    config['DEFAULT'] = {
-        'max_ip': str(max_ip),
-        'max_ping': str(max_ping),
-        'max_latency': str(max_latency),
-        'ip_include': ip_include,
-        'ip_exclude': ip_exclude,
-        'test_size': test_size,
-        'min_download_speed': min_download_speed,
-        'min_upload_speed': min_upload_speed,
-        'upload_results': upload_results,
-        'delete_existing': delete_existing,
-        'email': email,
-        'zone_id': zone_id,
-        'api_key': api_key,
-        'subdomain': subdomain
-    }
+            # Use regular expression to validate subdomain format
+            while not re.match(r"^[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,}$", subdomain):
+                # If subdomain is invalid, prompt user to try again
+                print("Invalid subdomain, please try again.")
+                subdomain = input(f"Subdomain to modify (i.e ip.my-domain.com) [{default_subdomain}]: ") or default_subdomain
 
-    # Saving the configuration info to config file for further use
-    with open('config.ini', 'w') as configfile:
-        config.write(configfile)
+        # Update config variable with given data from user
+        config['DEFAULT'] = {
+            'max_ip': str(max_ip),
+            'max_ping': str(max_ping),
+            'max_latency': str(max_latency),
+            'ip_include': ip_include,
+            'ip_exclude': ip_exclude,
+            'test_size': test_size,
+            'min_download_speed': min_download_speed,
+            'min_upload_speed': min_upload_speed,
+            'upload_results': upload_results,
+            'delete_existing': delete_existing,
+            'email': email,
+            'zone_id': zone_id,
+            'api_key': api_key,
+            'subdomain': subdomain
+        }
 
-    # Convert IP ranges to include (provided by user in a comma-seperated string) to Regular Expression
-    if ip_include:
-        include_regex = re.compile('|'.join(['^' + re.escape(c).replace('.', '\\.') + '\\.' for c in ip_include.split(',')]))
+        # Saving the configuration info to config file for further use
+        with open('config.ini', 'w') as configfile:
+            config.write(configfile)
 
-    # Convert IP ranges to exclude (provided by user in a comma-seperated string) to Regular Expression
-    if ip_exclude:
-        exclude_regex = re.compile('|'.join(['^' + re.escape(c).replace('.', '\\.') + '\\.' for c in ip_exclude.split(',')]))
+        # Convert IP ranges to include (provided by user in a comma-seperated string) to Regular Expression
+        if ip_include:
+            include_regex = re.compile('|'.join(['^' + re.escape(c).replace('.', '\\.') + '\\.' for c in ip_include.split(',')]))
 
-    print("")
-    # Read IPv4 CIDR blocks of Cloudflare Network from related file
-    with open('cf-ipv4.txt', 'r') as f:
-        for line in f:
-            cidr = line.strip()
-            if cidr:
-                print(f"Processing {cidr}...      \r", end='')
+        # Convert IP ranges to exclude (provided by user in a comma-seperated string) to Regular Expression
+        if ip_exclude:
+            exclude_regex = re.compile('|'.join(['^' + re.escape(c).replace('.', '\\.') + '\\.' for c in ip_exclude.split(',')]))
 
-                # Ignore CIDR block if not matches with include regex
-                if include_regex and not include_regex.match(cidr):
-                    continue
+        print("")
+        # Read IPv4 CIDR blocks of Cloudflare Network from related file
+        with open('cf-ipv4.txt', 'r') as f:
+            lines = f.readlines()
+            with Pool(5) as p:
+                result = p.map(partial(processRegex, include_reg=include_regex, exclude_reg=exclude_regex),
+                               lines)
 
-                # Ignore CIDR block if matches with exclude regex
-                if exclude_regex and exclude_regex.match(cidr):
-                    continue
+        ip_list = list(itertools.chain(*result))
 
-                # Convert CIDR block to IP addresses and add them to IP List
-                ip_list = ip_list + processCIDR(cidr)
+        # Shuffling the IP list in order to test different ip in different ranges by random
+        print(f"\n{len(ip_list)} IPs found. Shuffling the IPs...", end='')
+        random.shuffle(ip_list)
 
-    # Shuffling the IP list in order to test different ip in different ranges by random
-    print(f"\n{len(ip_list)} IPs found. Shuffling the IPs...", end='')
-    random.shuffle(ip_list)
-
-    # Preparation is done
-    print("Done.")
-except KeyboardInterrupt:
-    # Print proper message and exit the script in case user pressed CTRL+C
-    print("\n\nRequest cancelled by user!")
-    sys.exit(0)
-except requests.exceptions.RequestException as e:
-    print("Error: Something went wrong, Please try again!")
-    sys.exit(1)
-
-
-# Initiate variables
-test_no = 0
-successful_no = 0
-
-# Loop through IP adresses to check their ping, latency and download/upload speed
-for ip in ip_list:
-    # Increase the test number
-    test_no = test_no + 1
-    print(f"\rTest #{test_no:4d}: {ip:16s}", end='')
-
-    try:
-        # Calculate ping of selected ip using related function
-        ping = getPing(ip, max_ping)
-        # Ignore the IP if ping dosn't match the maximum required ping
-        if ping > max_ping:
-            continue
-
-        # Calculate latency of selected ip using related function
-        latency = getLatency(ip, max_latency)
-        # Ignore the IP if latency dosn't match the maximum required latency
-        if latency > max_latency:
-            continue
-
-        # Calculate upload speed of selected ip using related function
-        upload_speed = getUploadSpeed(ip, test_size, min_upload_speed)
-        # Ignore the IP if upload speed dosn't match the minimum required speed
-        if upload_speed < min_upload_speed:
-            continue
-
-        # Calculate download speed of selected ip using related function
-        download_speed = getDownloadSpeed(ip, test_size, min_download_speed)
-        # Ignore the IP if download speed dosn't match the minimum required speed
-        if download_speed < min_download_speed:
-            continue
-
-        # Increase number of successful test
-        successful_no = successful_no + 1
-
-        # Print out table header if it was the first record
-        if successful_no == 1:
-            print("\r", end='')
-            print("|-----|------------------|----------|-------------|----------------|--------------|")
-            print("|  #  |       IP         | Ping(ms) | Latency(ms) | Downlaod(Mbps) | Upload(Mbps) |")
-            print("|-----|------------------|----------|-------------|----------------|--------------|")
-
-        # Print out the IP and related info as well as ping, latency and download/upload speed
-        print(f"\r| {successful_no:3d} | {ip:16s} | {ping:7d}  |   {latency:8d}  |     {download_speed:9.2f}  |   {upload_speed:9.2f}  |")
-        selectd_ip_list.append(ip)
+        # Preparation is done
+        print("Done.")
     except KeyboardInterrupt:
+        # Print proper message and exit the script in case user pressed CTRL+C
         print("\n\nRequest cancelled by user!")
         sys.exit(0)
     except requests.exceptions.RequestException as e:
-        print("\r", end='') # Nothing to do
-
-    # Exit the loop if we found required number of clean IP addresses
-    if len(selectd_ip_list) >= max_ip:
-        break
-
-print("|-----|------------------|----------|-------------|----------------|--------------|")
-
-# Updating relevant subdomain with clean IP adresses
-if upload_results.lower() in ["y", "yes"]:
-    # Check if user wanted to delete existing records of given subdomain
-    if delete_existing.lower() in ["y", "yes"]:
-        # Get existing records of the given subdomain
-        existing_records = getCloudflareExistingRecords(email, api_key, zone_id, subdomain)
-        print("\nDeleting existing records...", end='')
-        #Delete all existing records of the given subdomain
-        for record in existing_records:
-            deleteCloudflareExistingRecord(email, api_key, zone_id, record["id"])
-        print(" Done.")
-
-    print("\nAdding new A Records for selected IPs:")
-    for ip in selectd_ip_list:
-        print(ip, end='')
-        addNewCloudflareRecord(email, api_key, zone_id, subdomain, ip)
-        print(" Done.")
-    print("\nAll records have been added to your subdomain.")
+        print("Error: Something went wrong, Please try again!")
+        sys.exit(1)
 
 
-print("\nWriting result to `selected-ips.csv` file....", end='')
+    # Initiate variables
+    test_no = 0
+    successful_no = 0
 
-with open('selected-ips.csv', 'w') as f:
-    for ip in selectd_ip_list:
-        f.write(ip + '\n')
+    # Loop through IP adresses to check their ping, latency and download/upload speed
+    for ip in ip_list:
+        # Increase the test number
+        test_no = test_no + 1
+        print(f"\rTest #{test_no:4d}: {ip:16s}", end='')
 
-print(" Done.\n\nFinished.")
+        try:
+            # Calculate ping of selected ip using related function
+            ping = getPing(ip, max_ping)
+            # Ignore the IP if ping dosn't match the maximum required ping
+            if ping > max_ping:
+                continue
+
+            # Calculate latency of selected ip using related function
+            latency = getLatency(ip, max_latency)
+            # Ignore the IP if latency dosn't match the maximum required latency
+            if latency > max_latency:
+                continue
+
+            # Calculate upload speed of selected ip using related function
+            upload_speed = getUploadSpeed(ip, test_size, min_upload_speed)
+            # Ignore the IP if upload speed dosn't match the minimum required speed
+            if upload_speed < min_upload_speed:
+                continue
+
+            # Calculate download speed of selected ip using related function
+            download_speed = getDownloadSpeed(ip, test_size, min_download_speed)
+            # Ignore the IP if download speed dosn't match the minimum required speed
+            if download_speed < min_download_speed:
+                continue
+
+            # Increase number of successful test
+            successful_no = successful_no + 1
+
+            # Print out table header if it was the first record
+            if successful_no == 1:
+                print("\r", end='')
+                print("|-----|------------------|----------|-------------|----------------|--------------|")
+                print("|  #  |       IP         | Ping(ms) | Latency(ms) | Downlaod(Mbps) | Upload(Mbps) |")
+                print("|-----|------------------|----------|-------------|----------------|--------------|")
+
+            # Print out the IP and related info as well as ping, latency and download/upload speed
+            print(f"\r| {successful_no:3d} | {ip:16s} | {ping:7d}  |   {latency:8d}  |     {download_speed:9.2f}  |   {upload_speed:9.2f}  |")
+            selectd_ip_list.append(ip)
+        except KeyboardInterrupt:
+            print("\n\nRequest cancelled by user!")
+            sys.exit(0)
+        except requests.exceptions.RequestException as e:
+            print("\r", end='') # Nothing to do
+
+        # Exit the loop if we found required number of clean IP addresses
+        if len(selectd_ip_list) >= max_ip:
+            break
+
+    print("|-----|------------------|----------|-------------|----------------|--------------|")
+
+    # Updating relevant subdomain with clean IP adresses
+    if upload_results.lower() in ["y", "yes"]:
+        # Check if user wanted to delete existing records of given subdomain
+        if delete_existing.lower() in ["y", "yes"]:
+            # Get existing records of the given subdomain
+            existing_records = getCloudflareExistingRecords(email, api_key, zone_id, subdomain)
+            print("\nDeleting existing records...", end='')
+            #Delete all existing records of the given subdomain
+            for record in existing_records:
+                deleteCloudflareExistingRecord(email, api_key, zone_id, record["id"])
+            print(" Done.")
+
+        print("\nAdding new A Records for selected IPs:")
+        for ip in selectd_ip_list:
+            print(ip, end='')
+            addNewCloudflareRecord(email, api_key, zone_id, subdomain, ip)
+            print(" Done.")
+        print("\nAll records have been added to your subdomain.")
+
+
+    print("\nWriting result to `selected-ips.csv` file....", end='')
+
+    with open('selected-ips.csv', 'w') as f:
+        for ip in selectd_ip_list:
+            f.write(ip + '\n')
+
+    print(" Done.\n\nFinished.")
 
 
