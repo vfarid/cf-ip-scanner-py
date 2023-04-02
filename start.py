@@ -7,11 +7,21 @@ import re
 import random
 import time
 import configparser
-import ping3
 from functools import partial
 from multiprocessing import Pool
 import itertools
 from typing import Pattern, AnyStr, List
+import curses
+import threading
+
+global print_ping_error_message
+print_ping_error_message = False   # initialize flag variable
+
+try:
+    import ping3
+except ImportError:
+    print_ping_error_message = True
+
 
 # Main function
 def main():
@@ -47,11 +57,13 @@ def main():
     default_api_key = config.get('DEFAULT', 'api_key', fallback='')
     default_subdomain = config.get('DEFAULT', 'subdomain', fallback='')
 
+    # Define global variable
+    global print_ping_error_message
+
     # Initialise the required variables
     delete_existing = 'yes'
     cidr_list = []
     ip_list = []
-    selectd_ip_list = []
     include_regex = ''
     exclude_regex = ''
 
@@ -149,7 +161,6 @@ def main():
         if ip_exclude:
             exclude_regex = re.compile('|'.join(['^' + re.escape(c).replace('.', '\\.') + '\\.' for c in ip_exclude.split(',')]))
 
-        print("")
         # Get IPv4 CIDR blocks of Cloudflare Network from related function
         cidr_list = getCIDRv4Ranges()
 
@@ -177,7 +188,7 @@ def main():
 
 
         # Shuffling the IP list in order to test different ip in different ranges by random
-        print(f"\n{len(ip_list)} IPs found. Shuffling the IPs...", end='')
+        print(f"\nShuffling the IPs...", end='')
         random.shuffle(ip_list)
 
         # Preparation is done
@@ -190,16 +201,90 @@ def main():
         print("Error: Something went wrong, Please try again!")
         sys.exit(1)
 
+    if print_ping_error_message:
+        print("Couldn't find \"ping3\" module. You may add it to your installation using following command: \n>> python -m pip install ping3\n")
+        print("The ping functionality will be ignored...")
+        print_ping_error_message = False
+        time.sleep(2)
+
+    # Start testing clean IPs
+    selectd_ip_list, total_test = curses.wrapper(startTest, ip_list=ip_list, config=config)
+
+    print(f"\n{total_test} of {len(ip_list)} matched IPs have peen tested.")
+    print(f"{len(selectd_ip_list)} IP(s) found:")
+    print("|---|---------------|--------|-------|-------|--------|----------|")
+    print("| # |       IP      |Ping(ms)|Jit(ms)|Lat(ms)|Up(Mbps)|Down(Mbps)|")
+    print("|---|---------------|--------|-------|-------|--------|----------|")
+
+    successful_no = 0
+    for el in selectd_ip_list:
+        successful_no = successful_no + 1
+        # Print out the IP and related info as well as ping, latency and download/upload speed
+        print(f"\r|{successful_no:3d}|{el.ip:15s}|{el.ping:7d} |{el.jitter:6d} |{el.latency:6d} |{el.upload:7.2f} |{el.download:9.2f} |")
+
+    print("|---|---------------|--------|-------|-------|--------|----------|\n")
+
+    print("IP list successfuly exported to `selected-ips.csv` file.\n")
+
+    # Updating relevant subdomain with clean IP adresses
+    if upload_results.lower() in ["y", "yes"]:
+        try:
+            # Check if user wanted to delete existing records of given subdomain
+            if delete_existing.lower() in ["y", "yes"]:
+                # Get existing records of the given subdomain
+                existing_records = getCloudflareExistingRecords(email, api_key, zone_id, subdomain)
+                print("Deleting existing records...", end='', flush=True)
+                #Delete all existing records of the given subdomain
+                for record in existing_records:
+                    deleteCloudflareExistingRecord(email, api_key, zone_id, record["id"])
+                print("Done.")
+
+            print("Adding new A Record(s) for selected IP(s):")
+            for el in selectd_ip_list:
+                print(el.ip, end='', flush=True)
+                addNewCloudflareRecord(email, api_key, zone_id, subdomain, el.ip)
+                print(" Done.")
+            print("All records have been added to your subdomain.")
+        except Exception as e:
+            print("Failed to update Cloudflare subdomain!")
+            print(e)
+
+    print("Done.\n")
+
+
+def startTest(stdscr: curses.window, ip_list: Pattern[AnyStr], config: configparser.ConfigParser):
+    # Clear the screen
+    stdscr.clear()
+    stdscr.refresh()
 
     # Initiate variables
+    selectd_ip_list = []
     test_no = 0
     successful_no = 0
+    max_ip = int(config.get('DEFAULT', 'max_ip'))
+    max_ping = int(config.get('DEFAULT', 'max_ping'))
+    max_jitter = int(config.get('DEFAULT', 'max_jitter'))
+    max_latency = int(config.get('DEFAULT', 'max_latency'))
+    test_size = int(config.get('DEFAULT', 'test_size'))
+    min_download_speed = float(config.get('DEFAULT', 'min_download_speed'))
+    min_upload_speed = float(config.get('DEFAULT', 'min_upload_speed'))
+
+    # Creating `selected-ips.csv` file to output results
+    with open('selected-ips.csv', 'w') as f:
+        f.write("#,IP,Ping (ms),Jitter (ms),Latency (ms),Upload (Mbps),Download (Mbps)\n")
 
     # Loop through IP adresses to check their ping, latency and download/upload speed
+    x = 0
+    y = 0
     for ip in ip_list:
+        y = 0;
         # Increase the test number
         test_no = test_no + 1
-        print(f"\r\033[KTest #{test_no}: {ip}", end='', flush=True)
+
+        stdscr.move(x, 0)
+        stdscr.clrtoeol()    # Clear the entire line
+        stdscr.addstr(x, y, f"Test #{test_no}: {ip}")
+        stdscr.refresh()
 
         try:
             # Calculate ping of selected ip using related function
@@ -208,7 +293,10 @@ def main():
             if ping > max_ping:
                 continue
 
-            print(f"\nPing: {ping}ms", end='', flush=True)
+            str = f"Ping: {ping}ms"
+            stdscr.addstr(x + 1, y, str)
+            stdscr.refresh()
+            y = y + len(str)
 
             # Calculate latency of selected ip using related function
             latency, jitter = getLatencyAndJitter(ip, max_latency)
@@ -218,25 +306,34 @@ def main():
                 continue
             # Ignore the IP if latency dosn't match the maximum required latency
             if latency > max_latency:
-                print(f"\r\033[K\033[F\r\033[K", end='', flush=True)
+                stdscr.move(x + 1, 0)
+                stdscr.clrtoeol()    # Clear the entire line
                 continue
 
-            print(f", Jitter: {jitter}ms, Latency: {latency}ms", end='', flush=True)
+            str = f", Jitter: {jitter}ms, Latency: {latency}ms"
+            stdscr.addstr(x + 1, y, str)
+            stdscr.refresh()
+            y = y + len(str)
 
             # Calculate upload speed of selected ip using related function
             upload_speed = getUploadSpeed(ip, test_size, min_upload_speed)
             # Ignore the IP if upload speed dosn't match the minimum required speed
             if upload_speed < min_upload_speed:
-                print(f"\r\033[K\033[F\r\033[K", end='', flush=True)
+                stdscr.move(x + 1, 0)
+                stdscr.clrtoeol()    # Clear the entire line
                 continue
 
-            print(f", Upload: {upload_speed}Mbps", end='', flush=True)
+            str = f", Upload: {upload_speed}Mbps"
+            stdscr.addstr(x + 1, y, str)
+            stdscr.refresh()
 
             # Calculate download speed of selected ip using related function
             download_speed = getDownloadSpeed(ip, test_size, min_download_speed)
             # Ignore the IP if download speed dosn't match the minimum required speed
 
-            print(f"\r\033[K\033[F\r\033[K", end='', flush=True)
+            stdscr.move(x + 1, 0)
+            stdscr.clrtoeol()    # Clear the entire line
+            stdscr.refresh()
 
             if download_speed < min_download_speed:
                 continue
@@ -246,14 +343,25 @@ def main():
 
             # Print out table header if it was the first record
             if successful_no == 1:
-                print("\r", end='')
-                print("|---|---------------|--------|-------|-------|--------|----------|")
-                print("| # |       IP      |Ping(ms)|Jit(ms)|Lat(ms)|Up(Mbps)|Down(Mbps)|")
-                print("|---|---------------|--------|-------|-------|--------|----------|")
+                stdscr.addstr(0, 0, "|---|---------------|--------|-------|-------|--------|----------|")
+                stdscr.addstr(1, 0, "| # |       IP      |Ping(ms)|Jit(ms)|Lat(ms)|Up(Mbps)|Down(Mbps)|")
+                stdscr.addstr(2, 0, "|---|---------------|--------|-------|-------|--------|----------|")
+                x = 5
 
             # Print out the IP and related info as well as ping, latency and download/upload speed
-            print(f"\r|{successful_no:3d}|{ip:15s}|{ping:7d} |{jitter:6d} |{latency:6d} |{upload_speed:7.2f} |{download_speed:9.2f} |")
-            selectd_ip_list.append(ip)
+            stdscr.addstr(x - 2, 0, f"|{successful_no:3d}|{ip:15s}|{ping:7d} |{jitter:6d} |{latency:6d} |{upload_speed:7.2f} |{download_speed:9.2f} |")
+            stdscr.addstr(x - 1, 0, "|---|---------------|--------|-------|-------|--------|----------|")
+            stdscr.move(x, 0)
+            stdscr.clrtoeol()    # Clear the entire line
+            stdscr.refresh()
+            x = x + 1
+
+            selectd_ip_list.append(IPInfo(ip, ping, jitter, latency, upload_speed, download_speed))
+
+            with open('selected-ips.csv',
+                'a') as f:
+                f.write(f"{successful_no},{ip},{ping},{jitter},{latency},{upload_speed},{download_speed}\n")
+
         except KeyboardInterrupt:
             print("\n\nRequest cancelled by user!")
             sys.exit(0)
@@ -264,39 +372,21 @@ def main():
         if len(selectd_ip_list) >= max_ip:
             break
 
-    print("|---|---------------|--------|-------|-------|--------|----------|")
+    stdscr.addstr(x, 0, "Done.")
+    stdscr.refresh()
+    time.sleep(3)
 
-    # Updating relevant subdomain with clean IP adresses
-    if upload_results.lower() in ["y", "yes"]:
-        try:
-            # Check if user wanted to delete existing records of given subdomain
-            if delete_existing.lower() in ["y", "yes"]:
-                # Get existing records of the given subdomain
-                existing_records = getCloudflareExistingRecords(email, api_key, zone_id, subdomain)
-                print("\nDeleting existing records...", end='', flush=True)
-                #Delete all existing records of the given subdomain
-                for record in existing_records:
-                    deleteCloudflareExistingRecord(email, api_key, zone_id, record["id"])
-                print(" Done.")
-
-            print("\nAdding new A Records for selected IPs:")
-            for ip in selectd_ip_list:
-                print(ip, end='', flush=True)
-                addNewCloudflareRecord(email, api_key, zone_id, subdomain, ip)
-                print(" Done.")
-            print("\nAll records have been added to your subdomain.")
-        except:
-            print("\nFailed to update Cloudflare subdomain! Invalid credentials provided.")
+    return selectd_ip_list, test_no
 
 
-
-    print("\nWriting result to `selected-ips.csv` file....", end='', flush=True)
-
-    with open('selected-ips.csv', 'w') as f:
-        for ip in selectd_ip_list:
-            f.write(ip + '\n')
-
-    print(" Done.\n\nFinished.")
+class IPInfo:
+    def __init__(self, ip, ping, jitter, latency, upload, download):
+        self.ip = ip
+        self.ping = ping
+        self.jitter = jitter
+        self.latency = latency
+        self.upload = upload
+        self.download = download
 
 
 # Function to get a list of IP addresses in a CIDR block
@@ -570,12 +660,13 @@ def addNewCloudflareRecord(email: str, api_key: str, zone_id: str, subdomain: st
         "X-Auth-Key": api_key,
         "Content-Type": "application/json"
     }
+
     url = f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records"
     data = {
         "type": "A",
         "name": subdomain,
         "content": ip,
-        "ttl": 1,
+        "ttl": 3600,
         "proxied": False
     }
     response = requests.post(url, headers=headers, json=data)
@@ -2612,6 +2703,8 @@ def getCIDRv4Ranges():
         '216.116.134.0/24',
         '216.120.180.0/23'
     ]
+
+
 
 
 # Call the main function
