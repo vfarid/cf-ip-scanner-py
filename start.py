@@ -455,7 +455,7 @@ def getLatencyAndJitter(ip, acceptable_latency):
     # Set the headers for the download request
     headers = {'Host': 'speed.cloudflare.com'}
     # Set the parameters for the download request
-    params = {'resolve': f"speed.cloudflare.com:443:{ip}"}
+    params = {'resolve': f"speed.cloudflare.com:443:{ip}", 'alpn': 'h2,http/1.1', 'utls': 'random'}
 
     latency = 0
     jitter = 0
@@ -511,7 +511,7 @@ def getDownloadSpeed(ip, size, min_speed):
     # Set the headers for the download request
     headers = {'Host': 'speed.cloudflare.com'}
     # Set the parameters for the download request
-    params = {'resolve': f"speed.cloudflare.com:443:{ip}"}
+    params = {'resolve': f"speed.cloudflare.com:443:{ip}", 'alpn': 'h2,http/1.1', 'utls': 'random'}
 
     try:
         # Start the timer for the download request
@@ -551,7 +551,7 @@ def getUploadSpeed(ip, size, min_speed):
     # Set the URL, headers, and parameters for the request
     url = 'https://speed.cloudflare.com/__up'
     headers = {'Content-Type': 'multipart/form-data', 'Host': 'speed.cloudflare.com'}
-    params = {'resolve': f"speed.cloudflare.com:443:{ip}"}
+    params = {'resolve': f"speed.cloudflare.com:443:{ip}", 'alpn': 'h2,http/1.1', 'utls': 'random'}
     # Create a sample file with null bytes of the specified size
     files = {'file': ('sample.bin', b"\x00" * upload_size)}
 
