@@ -12,9 +12,7 @@ from multiprocessing import Pool
 import itertools
 from typing import Pattern, AnyStr, List
 import curses
-import threading
 
-global print_ping_error_message
 print_ping_error_message = False   # initialize flag variable
 
 try:
