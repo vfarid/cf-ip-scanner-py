@@ -12,8 +12,10 @@ from multiprocessing import Pool
 import itertools
 from typing import Pattern, AnyStr, List
 import curses
+import subprocess
 
 print_ping_error_message = False   # initialize flag variable
+openssl_is_active = False
 
 try:
     import ping3
@@ -57,6 +59,7 @@ def main():
 
     # Define global variable
     global print_ping_error_message
+    global openssl_is_active
 
     # Initialise the required variables
     delete_existing = 'yes'
@@ -205,6 +208,12 @@ def main():
         print_ping_error_message = False
         time.sleep(2)
 
+    if has_openssl():
+        openssl_is_active = True
+    else:
+        print("OpenSSL is not installed! You man install it to your system and try again.")
+        openssl_is_active = False
+
     # Start testing clean IPs
     selectd_ip_list, total_test = curses.wrapper(startTest, ip_list=ip_list, config=config)
 
@@ -268,20 +277,28 @@ def startTest(stdscr: curses.window, ip_list: Pattern[AnyStr], config: configpar
     min_upload_speed = float(config.get('DEFAULT', 'min_upload_speed'))
 
     # Creating `selected-ips.csv` file to output results
-    with open('selected-ips.csv', 'w') as f:
-        f.write("#,IP,Ping (ms),Jitter (ms),Latency (ms),Upload (Mbps),Download (Mbps)\n")
+    with open('selected-ips.csv', 'w') as csv_file:
+        csv_file.write("#,IP,Ping (ms),Jitter (ms),Latency (ms),Upload (Mbps),Download (Mbps)\n")
+
+    # Creating `selected-ips.csv` file to output results
+    with open('selected-ips.txt', 'w') as txt_file:
+        txt_file.write("")
+
+    # Print out table header if it was the first record
+    stdscr.addstr(3, 0, "|---|---------------|--------|-------|-------|--------|----------|")
+    stdscr.addstr(4, 0, "| # |       IP      |Ping(ms)|Jit(ms)|Lat(ms)|Up(Mbps)|Down(Mbps)|")
+    stdscr.addstr(5, 0, "|---|---------------|--------|-------|-------|--------|----------|")
+    stdscr.addstr(6, 0, "|---|---------------|--------|-------|-------|--------|----------|")
 
     # Loop through IP adresses to check their ping, latency and download/upload speed
-    x = 0
-    y = 0
     for ip in ip_list:
-        y = 0;
+        col = 0
         # Increase the test number
         test_no = test_no + 1
 
-        stdscr.move(x, 0)
+        stdscr.move(0, 0)
         stdscr.clrtoeol()    # Clear the entire line
-        stdscr.addstr(x, y, f"Test #{test_no}: {ip}")
+        stdscr.addstr(0, 0, f"Test #{test_no}: {ip}")
         stdscr.refresh()
 
         try:
@@ -292,9 +309,9 @@ def startTest(stdscr: curses.window, ip_list: Pattern[AnyStr], config: configpar
                 continue
 
             str = f"Ping: {ping}ms"
-            stdscr.addstr(x + 1, y, str)
+            stdscr.addstr(1, 0, str)
             stdscr.refresh()
-            y = y + len(str)
+            col = col + len(str)
 
             # Calculate latency of selected ip using related function
             latency, jitter = getLatencyAndJitter(ip, max_latency)
@@ -304,32 +321,32 @@ def startTest(stdscr: curses.window, ip_list: Pattern[AnyStr], config: configpar
                 continue
             # Ignore the IP if latency dosn't match the maximum required latency
             if latency > max_latency:
-                stdscr.move(x + 1, 0)
+                stdscr.move(1, 0)
                 stdscr.clrtoeol()    # Clear the entire line
                 continue
 
             str = f", Jitter: {jitter}ms, Latency: {latency}ms"
-            stdscr.addstr(x + 1, y, str)
+            stdscr.addstr(1, col, str)
             stdscr.refresh()
-            y = y + len(str)
+            col = col + len(str)
 
             # Calculate upload speed of selected ip using related function
             upload_speed = getUploadSpeed(ip, test_size, min_upload_speed)
             # Ignore the IP if upload speed dosn't match the minimum required speed
             if upload_speed < min_upload_speed:
-                stdscr.move(x + 1, 0)
+                stdscr.move(1, 0)
                 stdscr.clrtoeol()    # Clear the entire line
                 continue
 
             str = f", Upload: {upload_speed}Mbps"
-            stdscr.addstr(x + 1, y, str)
+            stdscr.addstr(1, col, str)
             stdscr.refresh()
 
             # Calculate download speed of selected ip using related function
             download_speed = getDownloadSpeed(ip, test_size, min_download_speed)
             # Ignore the IP if download speed dosn't match the minimum required speed
 
-            stdscr.move(x + 1, 0)
+            stdscr.move(1, 0)
             stdscr.clrtoeol()    # Clear the entire line
             stdscr.refresh()
 
@@ -339,26 +356,20 @@ def startTest(stdscr: curses.window, ip_list: Pattern[AnyStr], config: configpar
             # Increase number of successful test
             successful_no = successful_no + 1
 
-            # Print out table header if it was the first record
-            if successful_no == 1:
-                stdscr.addstr(0, 0, "|---|---------------|--------|-------|-------|--------|----------|")
-                stdscr.addstr(1, 0, "| # |       IP      |Ping(ms)|Jit(ms)|Lat(ms)|Up(Mbps)|Down(Mbps)|")
-                stdscr.addstr(2, 0, "|---|---------------|--------|-------|-------|--------|----------|")
-                x = 5
-
+            # Move cursor to the right position
+            stdscr.move(6, 0)
+            # Insert a new line at the cursor position, shifting the existing lines down
+            stdscr.insertln()
             # Print out the IP and related info as well as ping, latency and download/upload speed
-            stdscr.addstr(x - 2, 0, f"|{successful_no:3d}|{ip:15s}|{ping:7d} |{jitter:6d} |{latency:6d} |{upload_speed:7.2f} |{download_speed:9.2f} |")
-            stdscr.addstr(x - 1, 0, "|---|---------------|--------|-------|-------|--------|----------|")
-            stdscr.move(x, 0)
-            stdscr.clrtoeol()    # Clear the entire line
+            stdscr.addstr(f"|{successful_no:3d}|{ip:15s}|{ping:7d} |{jitter:6d} |{latency:6d} |{upload_speed:7.2f} |{download_speed:9.2f} |")
             stdscr.refresh()
-            x = x + 1
 
             selectd_ip_list.append(IPInfo(ip, ping, jitter, latency, upload_speed, download_speed))
 
-            with open('selected-ips.csv',
-                'a') as f:
-                f.write(f"{successful_no},{ip},{ping},{jitter},{latency},{upload_speed},{download_speed}\n")
+            with open('selected-ips.csv', 'a') as csv_file:
+                csv_file.write(f"{successful_no},{ip},{ping},{jitter},{latency},{upload_speed},{download_speed}\n")
+            with open('selected-ips.txt', 'a') as txt_file:
+                txt_file.write(f"{ip}\n")
 
         except KeyboardInterrupt:
             print("\n\nRequest cancelled by user!")
@@ -370,7 +381,11 @@ def startTest(stdscr: curses.window, ip_list: Pattern[AnyStr], config: configpar
         if len(selectd_ip_list) >= max_ip:
             break
 
-    stdscr.addstr(x, 0, "Done.")
+    stdscr.move(0, 0)
+    stdscr.clrtoeol()    # Clear the entire line
+    stdscr.move(1, 0)
+    stdscr.clrtoeol()    # Clear the entire line
+    stdscr.addstr(0, 0, "Done.")
     stdscr.refresh()
     time.sleep(3)
 
@@ -446,6 +461,8 @@ def getLatencyAndJitter(ip, acceptable_latency):
     int: The latency in milliseconds.
     """
 
+    global openssl_is_active
+
     # An small data to download to calculate latency
     download_size = 1000
     # Calculate the timeout for requested minimum latency
@@ -455,7 +472,10 @@ def getLatencyAndJitter(ip, acceptable_latency):
     # Set the headers for the download request
     headers = {'Host': 'speed.cloudflare.com'}
     # Set the parameters for the download request
-    params = {'resolve': f"speed.cloudflare.com:443:{ip}", 'alpn': 'h2,http/1.1', 'utls': 'random'}
+    if openssl_is_active:
+        params = {'resolve': f"speed.cloudflare.com:443:{ip}", 'alpn': 'h2,http/1.1', 'utls': 'random'}
+    else:
+        params = {'resolve': f"speed.cloudflare.com:443:{ip}"}
 
     latency = 0
     jitter = 0
@@ -500,6 +520,8 @@ def getDownloadSpeed(ip, size, min_speed):
     float: The download speed in Mbps.
     """
 
+    global openssl_is_active
+
     # Convert size from KB to bytes
     download_size = size * 1024
     # Convert minimum speed from Mbps to bytes/s
@@ -511,7 +533,10 @@ def getDownloadSpeed(ip, size, min_speed):
     # Set the headers for the download request
     headers = {'Host': 'speed.cloudflare.com'}
     # Set the parameters for the download request
-    params = {'resolve': f"speed.cloudflare.com:443:{ip}", 'alpn': 'h2,http/1.1', 'utls': 'random'}
+    if openssl_is_active:
+        params = {'resolve': f"speed.cloudflare.com:443:{ip}", 'alpn': 'h2,http/1.1', 'utls': 'random'}
+    else:
+        params = {'resolve': f"speed.cloudflare.com:443:{ip}"}
 
     try:
         # Start the timer for the download request
@@ -542,6 +567,8 @@ def getUploadSpeed(ip, size, min_speed):
     float: The upload speed in Mbps.
     """
 
+    global openssl_is_active
+
     # Calculate the upload size, which is 1/4 of the download size to save bandwidth
     upload_size = int(size * 1024 / 4)
     # Calculate the minimum speed in bytes per second
@@ -551,7 +578,11 @@ def getUploadSpeed(ip, size, min_speed):
     # Set the URL, headers, and parameters for the request
     url = 'https://speed.cloudflare.com/__up'
     headers = {'Content-Type': 'multipart/form-data', 'Host': 'speed.cloudflare.com'}
-    params = {'resolve': f"speed.cloudflare.com:443:{ip}", 'alpn': 'h2,http/1.1', 'utls': 'random'}
+    if openssl_is_active:
+        params = {'resolve': f"speed.cloudflare.com:443:{ip}", 'alpn': 'h2,http/1.1', 'utls': 'random'}
+    else:
+        params = {'resolve': f"speed.cloudflare.com:443:{ip}"}
+
     # Create a sample file with null bytes of the specified size
     files = {'file': ('sample.bin', b"\x00" * upload_size)}
 
@@ -611,6 +642,7 @@ def getCloudflareExistingRecords(email, api_key, zone_id, subdomain):
         "Content-Type": "application/json"
     }
     url = f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records?type=A&name={subdomain}"
+
     response = requests.get(url, headers=headers)
     response.raise_for_status()
     return json.loads(response.text)["result"]
@@ -690,6 +722,15 @@ def processRegex(cidr: str, include_reg: Pattern[AnyStr], exclude_reg: Pattern[A
         if exclude_reg and exclude_reg.match(cidr):
             return []
         return processCIDR(cidr)
+
+
+# Check if openssl is installed or not
+def has_openssl():
+    try:
+        openssl = subprocess.check_call(["openssl", "version"], stdout=subprocess.PIPE)
+        return True
+    except:
+        return False
 
 
 # Define CIDR ranges of Cloudflare Network
@@ -2701,7 +2742,6 @@ def getCIDRv4Ranges():
         '216.116.134.0/24',
         '216.120.180.0/23'
     ]
-
 
 
 

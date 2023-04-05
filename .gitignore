@@ -1,4 +1,4 @@
-cf-*.txt
 config.ini
 test.py
 *.csv
+*.txt
