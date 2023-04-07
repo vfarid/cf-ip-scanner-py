@@ -12,7 +12,7 @@ from multiprocessing import Pool
 import itertools
 from typing import Pattern, AnyStr, List
 import curses
-import subprocess
+import ssl
 
 print_ping_error_message = False   # initialize flag variable
 openssl_is_active = False
@@ -726,11 +726,10 @@ def processRegex(cidr: str, include_reg: Pattern[AnyStr], exclude_reg: Pattern[A
 
 # Check if openssl is installed or not
 def has_openssl():
-    try:
-        openssl = subprocess.check_call(["openssl", "version"], stdout=subprocess.PIPE)
+    if ssl.OPENSSL_VERSION:
         return True
-    except:
-        return False
+    else:
+        False
 
 
 # Define CIDR ranges of Cloudflare Network
