@@ -52,7 +52,6 @@ def main():
     min_upload_speed = config.get('DEFAULT', 'min_upload_speed', fallback=DEFAULT_MIN_UPLOAD_SPEED)
     default_upload_results = config.get('DEFAULT', 'upload_results', fallback='no')
     default_delete_existing = config.get('DEFAULT', 'delete_existing', fallback='yes')
-    default_email = config.get('DEFAULT', 'email', fallback='')
     default_zone_id = config.get('DEFAULT', 'zone_id', fallback='')
     default_api_key = config.get('DEFAULT', 'api_key', fallback='')
     default_subdomain = config.get('DEFAULT', 'subdomain', fallback='')
@@ -98,7 +97,6 @@ def main():
         test_size = int(test_size)
         min_download_speed = float(min_download_speed)
         min_upload_speed = float(min_upload_speed)
-        email = default_email
         zone_id = default_zone_id
         api_key = default_api_key
         subdomain = default_subdomain
@@ -110,7 +108,6 @@ def main():
         # Code block to execute if upload_results is 'y' or 'yes'
         if upload_results.lower() in ["y", "yes"]:
             delete_existing = input(f"Do you want to delete extisting records of given subdomain before uploading the result to your Cloudflare (yes/no) [{default_delete_existing}]? ") or default_delete_existing
-            email = input(f"Cloudflare email [{default_email}]: ") or default_email
             zone_id = input(f"Cloudflare zone ID [{default_zone_id}]: ") or default_zone_id
             api_key = input(f"Cloudflare API key [{default_api_key}]: ") or default_api_key
 
@@ -118,9 +115,8 @@ def main():
             subdomain = input(f"Subdomain to modify (i.e ip.my-domain.com) [{default_subdomain}]: ") or default_subdomain
 
             # Check if provided credentials are correct and retry if they are not
-            while not validateCloudflareCredentials(email, api_key, zone_id):
+            while not validateCloudflareCredentials(api_key, zone_id):
                 print("Invalid cloudflare credentials, please try again.")
-                email = input(f"Cloudflare email [{default_email}]: ") or default_email
                 zone_id = input(f"Cloudflare zone ID [{default_zone_id}]: ") or default_zone_id
                 api_key = input(f"Cloudflare API key [{default_api_key}]: ") or default_api_key
 
@@ -144,7 +140,6 @@ def main():
             'min_upload_speed': min_upload_speed,
             'upload_results': upload_results,
             'delete_existing': delete_existing,
-            'email': email,
             'zone_id': zone_id,
             'api_key': api_key,
             'subdomain': subdomain
@@ -239,17 +234,17 @@ def main():
             # Check if user wanted to delete existing records of given subdomain
             if delete_existing.lower() in ["y", "yes"]:
                 # Get existing records of the given subdomain
-                existing_records = getCloudflareExistingRecords(email, api_key, zone_id, subdomain)
+                existing_records = getCloudflareExistingRecords(api_key, zone_id, subdomain)
                 print("Deleting existing records...", end='', flush=True)
                 #Delete all existing records of the given subdomain
                 for record in existing_records:
-                    deleteCloudflareExistingRecord(email, api_key, zone_id, record["id"])
+                    deleteCloudflareExistingRecord(api_key, zone_id, record["id"])
                 print("Done.")
 
             print("Adding new A Record(s) for selected IP(s):")
             for el in selectd_ip_list:
                 print(el.ip, end='', flush=True)
-                addNewCloudflareRecord(email, api_key, zone_id, subdomain, el.ip)
+                addNewCloudflareRecord(api_key, zone_id, subdomain, el.ip)
                 print(" Done.")
             print("All records have been added to your subdomain.")
         except Exception as e:
@@ -602,10 +597,9 @@ def getUploadSpeed(ip, size, min_speed):
 
 
 # Function to validate Cloudflare API credentials by making a GET request to the Cloudflare API with the provided credentials.
-def validateCloudflareCredentials(email, api_key, zone_id):
+def validateCloudflareCredentials(api_key, zone_id):
     """
     Args:
-    email (str): The email address associated with the Cloudflare account.
     api_key (str): The API key associated with the Cloudflare account.
     zone_id (str): The ID of the DNS zone for which to validate the credentials.
 
@@ -614,8 +608,7 @@ def validateCloudflareCredentials(email, api_key, zone_id):
     """
 
     headers = {
-        "X-Auth-Email": email,
-        "X-Auth-Key": api_key,
+        "Authorization": "Bearer " + api_key,
         "Content-Type": "application/json"
     }
     url = f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records"
@@ -624,10 +617,9 @@ def validateCloudflareCredentials(email, api_key, zone_id):
 
 
 # Function to get list of existing DNS records for the specified subdomain in the specified Cloudflare DNS zone.
-def getCloudflareExistingRecords(email, api_key, zone_id, subdomain):
+def getCloudflareExistingRecords(api_key, zone_id, subdomain):
     """
     Args:
-    email (str): The email address associated with the Cloudflare account.
     api_key (str): The API key associated with the Cloudflare account.
     zone_id (str): The ID of the DNS zone for which to get the existing records.
     subdomain (str): The subdomain for which to get the existing records.
@@ -637,8 +629,7 @@ def getCloudflareExistingRecords(email, api_key, zone_id, subdomain):
     """
 
     headers = {
-        "X-Auth-Email": email,
-        "X-Auth-Key": api_key,
+        "Authorization": "Bearer " + api_key,
         "Content-Type": "application/json"
     }
     url = f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records?type=A&name={subdomain}"
@@ -649,10 +640,9 @@ def getCloudflareExistingRecords(email, api_key, zone_id, subdomain):
 
 
 # Function to delete an existing DNS record in Cloudflare.
-def deleteCloudflareExistingRecord(email: str, api_key: str, zone_id: str, record_id: str) -> None:
+def deleteCloudflareExistingRecord(api_key: str, zone_id: str, record_id: str) -> None:
     """
     Args:
-        email (str): Cloudflare account email address.
         api_key (str): Cloudflare API key.
         zone_id (str): ID of the DNS zone where the record belongs.
         record_id (str): ID of the DNS record to be deleted.
@@ -662,8 +652,7 @@ def deleteCloudflareExistingRecord(email: str, api_key: str, zone_id: str, recor
     """
 
     headers = {
-        "X-Auth-Email": email,
-        "X-Auth-Key": api_key,
+        "Authorization": "Bearer " + api_key,
         "Content-Type": "application/json"
     }
     url = f"https://api.cloudflare.com/client/v4/zones/{zone_id}/dns_records/{record_id}"
@@ -672,10 +661,9 @@ def deleteCloudflareExistingRecord(email: str, api_key: str, zone_id: str, recor
 
 
 # Function to add a new DNS record in Cloudflare.
-def addNewCloudflareRecord(email: str, api_key: str, zone_id: str, subdomain: str, ip: str) -> None:
+def addNewCloudflareRecord(api_key: str, zone_id: str, subdomain: str, ip: str) -> None:
     """
     Args:
-        email (str): Cloudflare account email address.
         api_key (str): Cloudflare API key.
         zone_id (str): ID of the DNS zone where the record should be added.
         subdomain (str): Name of the subdomain to be added.
@@ -686,8 +674,7 @@ def addNewCloudflareRecord(email: str, api_key: str, zone_id: str, subdomain: st
     """
 
     headers = {
-        "X-Auth-Email": email,
-        "X-Auth-Key": api_key,
+        "Authorization": "Bearer " + api_key,
         "Content-Type": "application/json"
     }
 
