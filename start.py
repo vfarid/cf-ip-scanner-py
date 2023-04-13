@@ -40,7 +40,7 @@ def main():
 
     # Create a new configparser instance and load the configuration file
     config = configparser.ConfigParser()
-    config.read('config.ini')
+    config.read(sys.argv[1] if len(sys.argv) > 1 else 'config.ini')
 
     # Get the values of the configuration variables, using default values if not available
     max_ip = int(config.get('DEFAULT', 'max_ip', fallback=DEFAULT_MAX_IP))
@@ -152,9 +152,10 @@ def main():
             'subdomain': subdomain
         }
 
-        # Saving the configuration info to config file for further use
-        with open('config.ini', 'w') as configfile:
-            config.write(configfile)
+        # Saving the configuration info to default config file for further use (if a custom config file was not specified)
+        if len(sys.argv) <= 1:
+            with open('config.ini', 'w') as configfile:
+                config.write(configfile)
 
         # Convert IP ranges to include (provided by user in a comma-seperated string) to Regular Expression
         if ip_include:
