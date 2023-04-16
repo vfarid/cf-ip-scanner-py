@@ -52,12 +52,12 @@ def main():
     test_size = config.get('DEFAULT', 'test_size', fallback=DEFAULT_DOWNLOAD_SIZE_KB)
     min_download_speed = config.get('DEFAULT', 'min_download_speed', fallback=DEFAULT_MIN_DOWNLOAD_SPEED)
     min_upload_speed = config.get('DEFAULT', 'min_upload_speed', fallback=DEFAULT_MIN_UPLOAD_SPEED)
-    default_upload_results = config.get('DEFAULT', 'upload_results', fallback='no')
-    default_delete_existing = config.get('DEFAULT', 'delete_existing', fallback='yes')
-    default_email = config.get('DEFAULT', 'email', fallback='')
-    default_zone_id = config.get('DEFAULT', 'zone_id', fallback='')
-    default_api_key = config.get('DEFAULT', 'api_key', fallback='')
-    default_subdomain = config.get('DEFAULT', 'subdomain', fallback='')
+    upload_results = config.get('DEFAULT', 'upload_results', fallback='no')
+    delete_existing = config.get('DEFAULT', 'delete_existing', fallback='yes')
+    email = config.get('DEFAULT', 'email', fallback='')
+    zone_id = config.get('DEFAULT', 'zone_id', fallback='')
+    api_key = config.get('DEFAULT', 'api_key', fallback='')
+    subdomain = config.get('DEFAULT', 'subdomain', fallback='')
 
     # Define global variable
     global print_ping_error_message
@@ -104,38 +104,34 @@ def main():
             test_size = int(test_size)
             min_download_speed = float(min_download_speed)
             min_upload_speed = float(min_upload_speed)
-            email = default_email
-            zone_id = default_zone_id
-            api_key = default_api_key
-            subdomain = default_subdomain
 
 
             # Prompt the user for whether they want to upload the result to their Cloudflare subdomain
-            upload_results = input(f"Do you want to upload the result to your Cloudflare subdomain (yes/no) [{default_upload_results}]? ") or default_upload_results
+            upload_results = input(f"Do you want to upload the result to your Cloudflare subdomain (yes/no) [{upload_results}]? ") or upload_results
 
             # Code block to execute if upload_results is 'y' or 'yes'
             if upload_results.lower() in ["y", "yes"]:
-                delete_existing = input(f"Do you want to delete extisting records of given subdomain before uploading the result to your Cloudflare (yes/no) [{default_delete_existing}]? ") or default_delete_existing
-                email = input(f"Cloudflare email [{default_email}]: ") or default_email
-                zone_id = input(f"Cloudflare zone ID [{default_zone_id}]: ") or default_zone_id
-                api_key = input(f"Cloudflare API key [{default_api_key}]: ") or default_api_key
+                delete_existing = input(f"Do you want to delete extisting records of given subdomain before uploading the result to your Cloudflare (yes/no) [{delete_existing}]? ") or delete_existing
+                email = input(f"Cloudflare email [{email}]: ") or email
+                zone_id = input(f"Cloudflare zone ID [{zone_id}]: ") or zone_id
+                api_key = input(f"Cloudflare API key [{api_key}]: ") or api_key
 
                 # Prompt user to enter subdomain to modify
-                subdomain = input(f"Subdomain to modify (i.e ip.my-domain.com) [{default_subdomain}]: ") or default_subdomain
+                subdomain = input(f"Subdomain to modify (i.e ip.my-domain.com) [{subdomain}]: ") or subdomain
 
                 # Check if provided credentials are correct and retry if they are not
                 while not validateCloudflareCredentials(email, api_key, zone_id):
                     print("Invalid cloudflare credentials, please try again.")
-                    email = input(f"Cloudflare email [{default_email}]: ") or default_email
-                    zone_id = input(f"Cloudflare zone ID [{default_zone_id}]: ") or default_zone_id
-                    api_key = input(f"Cloudflare API key [{default_api_key}]: ") or default_api_key
+                    email = input(f"Cloudflare email [{email}]: ") or email
+                    zone_id = input(f"Cloudflare zone ID [{zone_id}]: ") or zone_id
+                    api_key = input(f"Cloudflare API key [{api_key}]: ") or api_key
 
 
                 # Use regular expression to validate subdomain format
                 while not re.match(r"^[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,}$", subdomain):
                     # If subdomain is invalid, prompt user to try again
                     print("Invalid subdomain, please try again.")
-                    subdomain = input(f"Subdomain to modify (i.e ip.my-domain.com) [{default_subdomain}]: ") or default_subdomain
+                    subdomain = input(f"Subdomain to modify (i.e ip.my-domain.com) [{subdomain}]: ") or subdomain
 
             # Update config variable with given data from user
             config['DEFAULT'] = {
