@@ -192,7 +192,7 @@ def main():
         print(f"\nShuffling the IPs...", end='')
         random.shuffle(ip_list)
 
-        # Preparation is done
+        # Preparation is done 
         print("Done.")
     except KeyboardInterrupt:
         # Print proper message and exit the script in case user pressed CTRL+C
