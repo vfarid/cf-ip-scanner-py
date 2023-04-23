@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import sys
 import os.path
 import requests
@@ -26,6 +28,10 @@ except ImportError:
 
 # Main function
 def main():
+
+    # Check for custom config file in command-line arguments
+    customconfig = False if len(sys.argv) <= 1 else os.path.exists(sys.argv[1])
+
     DEFAULT_MAX_IP = 50
     DEFAULT_MAX_PING = 500
     DEFAULT_MAX_JITTER = 100
@@ -39,7 +45,7 @@ def main():
 
     # Create a new configparser instance and load the configuration file
     config = configparser.ConfigParser()
-    config.read('config.ini')
+    config.read(sys.argv[1] if customconfig else 'config.ini')
 
     # Get the values of the configuration variables, using default values if not available
     max_ip = int(config.get('DEFAULT', 'max_ip', fallback=DEFAULT_MAX_IP))
@@ -51,12 +57,12 @@ def main():
     test_size = config.get('DEFAULT', 'test_size', fallback=DEFAULT_DOWNLOAD_SIZE_KB)
     min_download_speed = config.get('DEFAULT', 'min_download_speed', fallback=DEFAULT_MIN_DOWNLOAD_SPEED)
     min_upload_speed = config.get('DEFAULT', 'min_upload_speed', fallback=DEFAULT_MIN_UPLOAD_SPEED)
-    default_upload_results = config.get('DEFAULT', 'upload_results', fallback='no')
-    default_delete_existing = config.get('DEFAULT', 'delete_existing', fallback='yes')
-    default_email = config.get('DEFAULT', 'email', fallback='')
-    default_zone_id = config.get('DEFAULT', 'zone_id', fallback='')
-    default_api_key = config.get('DEFAULT', 'api_key', fallback='')
-    default_subdomain = config.get('DEFAULT', 'subdomain', fallback='')
+    upload_results = config.get('DEFAULT', 'upload_results', fallback='no')
+    delete_existing = config.get('DEFAULT', 'delete_existing', fallback='yes')
+    email = config.get('DEFAULT', 'email', fallback='')
+    zone_id = config.get('DEFAULT', 'zone_id', fallback='')
+    api_key = config.get('DEFAULT', 'api_key', fallback='')
+    subdomain = config.get('DEFAULT', 'subdomain', fallback='')
 
     # Define global variable
     global print_ping_error_message
@@ -71,89 +77,90 @@ def main():
 
     print("Press CTRL+C to exit...\n")
 
+
     try:
-        # Prompt user for input with default values from configuration file
-        max_ip = input(f"Enter max IP [{max_ip}]: ") or max_ip
-        max_ping = input(f"Enter max ping [{max_ping}]: ") or max_ping
-        max_jitter = input(f"Enter max jitter [{max_jitter}]: ") or max_jitter
-        max_latency = input(f"Enter max latency [{max_latency}]: ") or max_latency
-        ip_include = input(f"Enter IPs to include (comma seperated, '-' to ignore) [{ip_include}]: ") or ip_include
-        ip_exclude = input(f"Enter IPs to exclude (comma seperated, '-' to ignore) [{ip_exclude}]: ") or ip_exclude
-        test_size = input(f"Enter test data size in KB [{test_size}]: ") or test_size
-        min_download_speed = input(f"Enter minimum download speed (Mbps) [{min_download_speed}]: ") or min_download_speed
-        min_upload_speed = input(f"Enter minimum upload speed (Mbps) [{min_upload_speed}]: ") or min_upload_speed
 
-        # Clear the include regex in case "-" provided by the user
-        if ip_include == '-':
-            ip_include = ''
+        # If no custom config file was specified...
+        if not customconfig:
 
-        # Clear the exclude regex in case "-" provided by the user
-        if ip_exclude == '-':
-            ip_exclude = ''
+            # Prompt user for input with default values from configuration file
+            max_ip = input(f"Enter max IP [{max_ip}]: ") or max_ip
+            max_ping = input(f"Enter max ping [{max_ping}]: ") or max_ping
+            max_jitter = input(f"Enter max jitter [{max_jitter}]: ") or max_jitter
+            max_latency = input(f"Enter max latency [{max_latency}]: ") or max_latency
+            ip_include = input(f"Enter IPs to include (comma seperated, '-' to ignore) [{ip_include}]: ") or ip_include
+            ip_exclude = input(f"Enter IPs to exclude (comma seperated, '-' to ignore) [{ip_exclude}]: ") or ip_exclude
+            test_size = input(f"Enter test data size in KB [{test_size}]: ") or test_size
+            min_download_speed = input(f"Enter minimum download speed (Mbps) [{min_download_speed}]: ") or min_download_speed
+            min_upload_speed = input(f"Enter minimum upload speed (Mbps) [{min_upload_speed}]: ") or min_upload_speed
 
-        # Convert the inputs to the appropriate types in related variables
-        max_ip = int(max_ip)
-        max_ping = int(max_ping)
-        max_jitter = int(max_jitter)
-        max_latency = int(max_latency)
-        test_size = int(test_size)
-        min_download_speed = float(min_download_speed)
-        min_upload_speed = float(min_upload_speed)
-        email = default_email
-        zone_id = default_zone_id
-        api_key = default_api_key
-        subdomain = default_subdomain
+            # Clear the include regex in case "-" provided by the user
+            if ip_include == '-':
+                ip_include = ''
 
+            # Clear the exclude regex in case "-" provided by the user
+            if ip_exclude == '-':
+                ip_exclude = ''
 
-        # Prompt the user for whether they want to upload the result to their Cloudflare subdomain
-        upload_results = input(f"Do you want to upload the result to your Cloudflare subdomain (yes/no) [{default_upload_results}]? ") or default_upload_results
-
-        # Code block to execute if upload_results is 'y' or 'yes'
-        if upload_results.lower() in ["y", "yes"]:
-            delete_existing = input(f"Do you want to delete extisting records of given subdomain before uploading the result to your Cloudflare (yes/no) [{default_delete_existing}]? ") or default_delete_existing
-            email = input(f"Cloudflare email [{default_email}]: ") or default_email
-            zone_id = input(f"Cloudflare zone ID [{default_zone_id}]: ") or default_zone_id
-            api_key = input(f"Cloudflare API key [{default_api_key}]: ") or default_api_key
-
-            # Prompt user to enter subdomain to modify
-            subdomain = input(f"Subdomain to modify (i.e ip.my-domain.com) [{default_subdomain}]: ") or default_subdomain
-
-            # Check if provided credentials are correct and retry if they are not
-            while not validateCloudflareCredentials(email, api_key, zone_id):
-                print("Invalid cloudflare credentials, please try again.")
-                email = input(f"Cloudflare email [{default_email}]: ") or default_email
-                zone_id = input(f"Cloudflare zone ID [{default_zone_id}]: ") or default_zone_id
-                api_key = input(f"Cloudflare API key [{default_api_key}]: ") or default_api_key
+            # Convert the inputs to the appropriate types in related variables
+            max_ip = int(max_ip)
+            max_ping = int(max_ping)
+            max_jitter = int(max_jitter)
+            max_latency = int(max_latency)
+            test_size = int(test_size)
+            min_download_speed = float(min_download_speed)
+            min_upload_speed = float(min_upload_speed)
 
 
-            # Use regular expression to validate subdomain format
-            while not re.match(r"^[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,}$", subdomain):
-                # If subdomain is invalid, prompt user to try again
-                print("Invalid subdomain, please try again.")
-                subdomain = input(f"Subdomain to modify (i.e ip.my-domain.com) [{default_subdomain}]: ") or default_subdomain
+            # Prompt the user for whether they want to upload the result to their Cloudflare subdomain
+            upload_results = input(f"Do you want to upload the result to your Cloudflare subdomain (yes/no) [{upload_results}]? ") or upload_results
 
-        # Update config variable with given data from user
-        config['DEFAULT'] = {
-            'max_ip': str(max_ip),
-            'max_ping': str(max_ping),
-            'max_jitter': str(max_jitter),
-            'max_latency': str(max_latency),
-            'ip_include': ip_include,
-            'ip_exclude': ip_exclude,
-            'test_size': test_size,
-            'min_download_speed': min_download_speed,
-            'min_upload_speed': min_upload_speed,
-            'upload_results': upload_results,
-            'delete_existing': delete_existing,
-            'email': email,
-            'zone_id': zone_id,
-            'api_key': api_key,
-            'subdomain': subdomain
-        }
+            # Code block to execute if upload_results is 'y' or 'yes'
+            if upload_results.lower() in ["y", "yes"]:
+                delete_existing = input(f"Do you want to delete extisting records of given subdomain before uploading the result to your Cloudflare (yes/no) [{delete_existing}]? ") or delete_existing
+                email = input(f"Cloudflare email [{email}]: ") or email
+                zone_id = input(f"Cloudflare zone ID [{zone_id}]: ") or zone_id
+                api_key = input(f"Cloudflare API key [{api_key}]: ") or api_key
 
-        # Saving the configuration info to config file for further use
-        with open('config.ini', 'w') as configfile:
-            config.write(configfile)
+                # Prompt user to enter subdomain to modify
+                subdomain = input(f"Subdomain to modify (i.e ip.my-domain.com) [{subdomain}]: ") or subdomain
+
+                # Check if provided credentials are correct and retry if they are not
+                while not validateCloudflareCredentials(email, api_key, zone_id):
+                    print("Invalid cloudflare credentials, please try again.")
+                    email = input(f"Cloudflare email [{email}]: ") or email
+                    zone_id = input(f"Cloudflare zone ID [{zone_id}]: ") or zone_id
+                    api_key = input(f"Cloudflare API key [{api_key}]: ") or api_key
+
+
+                # Use regular expression to validate subdomain format
+                while not re.match(r"^[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,}$", subdomain):
+                    # If subdomain is invalid, prompt user to try again
+                    print("Invalid subdomain, please try again.")
+                    subdomain = input(f"Subdomain to modify (i.e ip.my-domain.com) [{subdomain}]: ") or subdomain
+
+            # Update config variable with given data from user
+            config['DEFAULT'] = {
+                'max_ip': str(max_ip),
+                'max_ping': str(max_ping),
+                'max_jitter': str(max_jitter),
+                'max_latency': str(max_latency),
+                'ip_include': ip_include,
+                'ip_exclude': ip_exclude,
+                'test_size': test_size,
+                'min_download_speed': min_download_speed,
+                'min_upload_speed': min_upload_speed,
+                'upload_results': upload_results,
+                'delete_existing': delete_existing,
+                'email': email,
+                'zone_id': zone_id,
+                'api_key': api_key,
+                'subdomain': subdomain
+            }
+
+            # Saving the configuration info to config file for further use
+            with open('config.ini', 'w') as configfile:
+                config.write(configfile)
 
         # Convert IP ranges to include (provided by user in a comma-seperated string) to Regular Expression
         if ip_include:
