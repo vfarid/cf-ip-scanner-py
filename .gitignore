@@ -1,4 +1,5 @@
-selected-ips.txt
-config.ini
-test.py
+selected-ips.*
+*.ini
 *.csv
+*.cnf
+test.py
