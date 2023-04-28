@@ -36,7 +36,6 @@ def main():
     DEFAULT_MAX_PING = 500
     DEFAULT_MAX_JITTER = 100
     DEFAULT_MAX_LATENCY = 1000
-    DEFAULT_IP_REGEX = ""
     DEFAULT_IP_INCLUDE = ""
     DEFAULT_IP_EXCLUDE = ""
     DEFAULT_DOWNLOAD_SIZE_KB = 1024
@@ -235,7 +234,7 @@ def main():
     for el in selectd_ip_list:
         successful_no = successful_no + 1
         # Print out the IP and related info as well as ping, latency and download/upload speed
-        print(f"\r|{successful_no:3d}|{el.ip:15s}|{el.ping:7d} |{el.jitter:6d} |{el.latency:6d} |{el.upload:7.2f} |{el.download:9.2f} |")
+        print(f"\r|{successful_no:3d}|{el.ip:15s}| {el.ping:7d}  | {el.jitter:6d}  | {el.latency:6d}  | {el.upload:7.2f}  | {el.download:9.2f}  |")
 
     print("|---|---------------|----------|---------|---------|----------|------------|\n")
 
@@ -369,7 +368,7 @@ def startTest(stdscr: curses.window, ip_list: Pattern[AnyStr], config: configpar
             # Insert a new line at the cursor position, shifting the existing lines down
             stdscr.insertln()
             # Print out the IP and related info as well as ping, latency and download/upload speed
-            stdscr.addstr(f"|{successful_no:3d}|{ip:15s}|{ping:7d} |{jitter:6d} |{latency:6d} |{upload_speed:7.2f} |{download_speed:9.2f} |")
+            stdscr.addstr(f"|{successful_no:3d}|{ip:15s}| {ping:7d}  | {jitter:6d}  | {latency:6d}  | {upload_speed:7.2f}  | {download_speed:9.2f}  |")
             stdscr.refresh()
 
             selectd_ip_list.append(IPInfo(ip, ping, jitter, latency, upload_speed, download_speed))
