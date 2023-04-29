@@ -170,7 +170,7 @@ def main():
             exclude_regex = re.compile('|'.join(['^' + re.escape(c).replace('.', '\\.') + '\\.' for c in ip_exclude.split(',')]))
 
         # Get IPv4 CIDR blocks of Cloudflare Network from related function
-        cidr_list = getCIDRv4Ranges()
+        cidr_list = getIPsCidrRanges('ipv4')
 
         # Process CIDR list
         try:
@@ -738,26 +738,32 @@ def has_openssl():
     else:
         False
 
+# Get IPs txt file from Github/vfarid
+def get_github_file(file_name):
+    response = requests.get(f'https://api.github.com/repos/vfarid/cf-ip-scanner-py/contents/{file_name}.txt?ref=main')
+    result = json.loads(response.text)
+    with open(f'./{file_name}.txt', "+a") as f:
+            f.write(base64.b64decode(result['content']).decode('utf-8'))
+
+# Download IPv4 & IPv6 text file
+def download_ips():
+    ips = ['ipv4', 'ipv6']
+    for ip in ips:
+        if(os.path.isfile(f'./{ip}.txt') != True):
+            get_github_file(ip)
 
 # Define CIDR ranges of Cloudflare Network
-def getCIDRv4Ranges():
-    ipv4_file = './ipv4.txt'
-    if(os.path.isfile(ipv4_file)):
-        # ipv4.txt is exist and get contents
-        with open(ipv4_file) as f:
-            contents = f.readlines()
+def getIPsCidrRanges(ip_name):
+    # Download ipv4 and ipv6 lists
+    download_ips()
 
-        # replace \n and return list
-        return [item.replace('\n', '') if '\n' in item else item for item in contents]
+    ip_file = f'./{ip_name}.txt'
+    # Get ip list contents
+    with open(ip_file) as f:
+        contents = f.readlines()
 
-    else:
-        # download and save ipv4.txt and get contents
-        response = requests.get(
-            'https://api.github.com/repos/mzarchi/cf-ip-scanner-py/contents/ipv4.txt?ref=main')
-        result = json.loads(response.text)
-        with open(ipv4_file, "+a") as f:
-            f.write(base64.b64decode(result['content']).decode('utf-8'))
-        return getCIDRv4Ranges()
+    # replace \n and return list
+    return [item.replace('\n', '') if '\n' in item else item for item in contents]
 
 # Call the main function
 if __name__ == '__main__':
