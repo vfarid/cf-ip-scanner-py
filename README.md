@@ -5,15 +5,15 @@
 
 
 ### ویدیوی آموزشی کامل (روی مک) در یوتیوب:
-[youtu.be/OO80Nx1bhOo](youtu.be/OO80Nx1bhOo)
+[youtu.be/OO80Nx1bhOo](https://youtu.be/OO80Nx1bhOo)
 
 این ویدیو رو کامل ببینید، فارغ از اینکه چه پلتفرمی دارید. در ادامه ویدیوی آموزشی ویندوز و اندروید رو هم میتونید ببینید. روی ios هم مشابه اندروید میتونید اپ Pyto رو نصب کنید و اسکریپت رو اجرا کنید.
 
 ### ویدیوی آموزشی برای ویندوز:
-[youtu.be/YCSwZG3cjAU](youtu.be/YCSwZG3cjAU)
+[youtu.be/YCSwZG3cjAU](https://youtu.be/YCSwZG3cjAU)
 
 ### ویدیوی آموزشی برای اندروید:
-[youtu.be/piKS04W6AHE](youtu.be/piKS04W6AHE)
+[youtu.be/piKS04W6AHE](https://youtu.be/piKS04W6AHE)
 
 توییت مرتبط:
 
