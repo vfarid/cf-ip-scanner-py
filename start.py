@@ -336,40 +336,44 @@ def startTest(stdscr: curses.window, ip_list: Pattern[AnyStr], config: configpar
             stdscr.addstr(1, col, str)
             stdscr.refresh()
             col = col + len(str)
+            upload_speed = 0
+            download_speed = 0
 
-            # Calculate upload speed of selected ip using related function
-            upload_speed = getUploadSpeed(ip, test_size, min_upload_speed)
-            # Ignore the IP if upload speed dosn't match the minimum required speed
-            if upload_speed < min_upload_speed:
+            if min_upload_speed > 0:
+                # Calculate upload speed of selected ip using related function
+                upload_speed = getUploadSpeed(ip, test_size, min_upload_speed)
+                # Ignore the IP if upload speed dosn't match the minimum required speed
+                if upload_speed < min_upload_speed:
+                    stdscr.move(1, 0)
+                    stdscr.clrtoeol()    # Clear the entire line
+                    continue
+
+                str = f", Upload: {upload_speed}Mbps"
+                stdscr.addstr(1, col, str)
+                stdscr.refresh()
+
+            if download_speed > 0:
+                # Calculate download speed of selected ip using related function
+                download_speed = getDownloadSpeed(ip, test_size, min_download_speed)
+                # Ignore the IP if download speed dosn't match the minimum required speed
+
                 stdscr.move(1, 0)
                 stdscr.clrtoeol()    # Clear the entire line
-                continue
+                stdscr.refresh()
 
-            str = f", Upload: {upload_speed}Mbps"
-            stdscr.addstr(1, col, str)
-            stdscr.refresh()
+                if download_speed < min_download_speed:
+                    continue
 
-            # Calculate download speed of selected ip using related function
-            download_speed = getDownloadSpeed(ip, test_size, min_download_speed)
-            # Ignore the IP if download speed dosn't match the minimum required speed
-
-            stdscr.move(1, 0)
-            stdscr.clrtoeol()    # Clear the entire line
-            stdscr.refresh()
-
-            if download_speed < min_download_speed:
-                continue
+                # Move cursor to the right position
+                stdscr.move(6, 0)
+                # Insert a new line at the cursor position, shifting the existing lines down
+                stdscr.insertln()
+                # Print out the IP and related info as well as ping, latency and download/upload speed
+                stdscr.addstr(f"|{successful_no:3d}|{ip:15s}| {ping:7d}  | {jitter:6d}  | {latency:6d}  | {upload_speed:7.2f}  | {download_speed:9.2f}  |")
+                stdscr.refresh()
 
             # Increase number of successful test
             successful_no = successful_no + 1
-
-            # Move cursor to the right position
-            stdscr.move(6, 0)
-            # Insert a new line at the cursor position, shifting the existing lines down
-            stdscr.insertln()
-            # Print out the IP and related info as well as ping, latency and download/upload speed
-            stdscr.addstr(f"|{successful_no:3d}|{ip:15s}| {ping:7d}  | {jitter:6d}  | {latency:6d}  | {upload_speed:7.2f}  | {download_speed:9.2f}  |")
-            stdscr.refresh()
 
             selectd_ip_list.append(IPInfo(ip, ping, jitter, latency, upload_speed, download_speed))
 
